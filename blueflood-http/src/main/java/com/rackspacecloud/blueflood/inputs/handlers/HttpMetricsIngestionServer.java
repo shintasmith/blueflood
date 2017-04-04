@@ -32,9 +32,12 @@ import com.rackspacecloud.blueflood.types.IMetric;
 import com.rackspacecloud.blueflood.types.MetricsCollection;
 import com.rackspacecloud.blueflood.utils.Metrics;
 import com.rackspacecloud.blueflood.utils.ModuleLoader;
+import com.rackspacecloud.blueflood.utils.NettyUtils;
 import com.rackspacecloud.blueflood.utils.TimeValue;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.group.ChannelGroup;
 import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -65,6 +68,7 @@ public class HttpMetricsIngestionServer {
 
     private EventLoopGroup acceptorGroup;
     private EventLoopGroup workerGroup;
+    private Class          channelClass;
     private ChannelGroup allOpenChannels = new DefaultChannelGroup("allOpenChannels", GlobalEventExecutor.INSTANCE);
 
     private int HTTP_CONNECTION_READ_IDLE_TIME_SECONDS =
@@ -93,10 +97,7 @@ public class HttpMetricsIngestionServer {
         this.processor = new Processor(context, timeout);
         this.httpMaxContentLength = Configuration.getInstance().getIntegerProperty(HttpConfig.HTTP_MAX_CONTENT_LENGTH);
 
-        int acceptThreads = Configuration.getInstance().getIntegerProperty(HttpConfig.MAX_WRITE_ACCEPT_THREADS);
-        int workerThreads = Configuration.getInstance().getIntegerProperty(HttpConfig.MAX_WRITE_WORKER_THREADS);
-        acceptorGroup = new NioEventLoopGroup(acceptThreads); // acceptor threads
-        workerGroup = new NioEventLoopGroup(workerThreads);   // client connections threads
+        initNetty();
     }
 
     /**
@@ -130,7 +131,7 @@ public class HttpMetricsIngestionServer {
         log.info("Starting metrics listener HTTP server on port {}", httpIngestPort);
         ServerBootstrap server = new ServerBootstrap();
         server.group(acceptorGroup, workerGroup)
-                .channel(NioServerSocketChannel.class)
+                .channel(channelClass)
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     public void initChannel(SocketChannel channel) throws Exception {
@@ -279,6 +280,21 @@ public class HttpMetricsIngestionServer {
                 tokenDiscoveryWriter.processTokens(batches);
 
             return batchWriter.apply(batches);
+        }
+    }
+
+    private void initNetty() {
+        int acceptThreads = Configuration.getInstance().getIntegerProperty(HttpConfig.MAX_WRITE_ACCEPT_THREADS);
+        int workerThreads = Configuration.getInstance().getIntegerProperty(HttpConfig.MAX_WRITE_WORKER_THREADS);
+
+        if ( NettyUtils.get().isEpollAvailable() ) {
+            acceptorGroup = new EpollEventLoopGroup(acceptThreads); // acceptor threads
+            workerGroup = new EpollEventLoopGroup(workerThreads);   // client connections threads
+            channelClass = EpollServerSocketChannel.class;
+        } else {
+            acceptorGroup = new NioEventLoopGroup(acceptThreads); // acceptor threads
+            workerGroup = new NioEventLoopGroup(workerThreads);   // client connections threads
+            channelClass = NioServerSocketChannel.class;
         }
     }
 

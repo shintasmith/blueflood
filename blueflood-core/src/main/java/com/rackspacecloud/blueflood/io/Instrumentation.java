@@ -19,10 +19,12 @@ package com.rackspacecloud.blueflood.io;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-import com.datastax.shaded.netty.util.internal.StringUtil;
+
 import com.netflix.astyanax.connectionpool.exceptions.ConnectionException;
 import com.netflix.astyanax.connectionpool.exceptions.PoolTimeoutException;
 import com.rackspacecloud.blueflood.utils.Metrics;
+
+import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -170,14 +172,14 @@ public class Instrumentation implements InstrumentationMBean {
     }
 
     public static Meter getIngestedMetricsMeter(String tenantId) {
-        if ( StringUtil.isNullOrEmpty(tenantId) ) {
+        if (StringUtils.isEmpty(tenantId) ) {
             return null;
         }
         return Metrics.meter(Instrumentation.class, "tenants", tenantId, "Data Points Ingested");
     }
 
     public static Meter getIngestedDelayedMetricsMeter(String tenantId) {
-        if ( StringUtil.isNullOrEmpty(tenantId) ) {
+        if ( StringUtils.isEmpty(tenantId) ) {
             return null;
         }
         return Metrics.meter(Instrumentation.class, "tenants", tenantId, "Delayed Data Points Ingested");
